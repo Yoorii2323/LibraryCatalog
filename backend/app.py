@@ -23,6 +23,8 @@ SECRET_KEY_FILE = BACKEND_DIR / '.flask_secret'
 
 # Публичный URL сайта на PythonAnywhere (для агрегированного поиска без переменных окружения)
 PYTHONANYWHERE_SITE_URL = 'https://yoori2323.pythonanywhere.com'
+# Меняется при обновлениях — откройте /api/ping на сайте, чтобы убедиться, что сервер подтянул новый код
+APP_BUILD = '2025-05-no-mailru-smtp'
 
 
 def is_pythonanywhere() -> bool:
@@ -83,19 +85,8 @@ def is_mail_ru_email(email: str) -> bool:
     return domain in MAIL_RU_DOMAINS
 
 
-def _mailru_rcpt_check_enabled() -> bool:
-    """Проверка существования ящика через порт 25 — только если явно включена (локально)."""
-    if os.environ.get('SKIP_MAILRU_RCPT', '').lower() in ('1', 'true', 'yes'):
-        return False
-    if os.environ.get('ENABLE_MAILRU_RCPT', '').lower() in ('1', 'true', 'yes'):
-        return True
-    if is_pythonanywhere():
-        return False
-    return False
-
-
 def verify_mail_ru_mailbox_exists(email: str) -> tuple:
-    """Формат и домен Mail.ru; RCPT на MX — только при ENABLE_MAILRU_RCPT=1."""
+    """Проверка формата и домена Mail.ru (без SMTP — порт 25 на хостинге недоступен)."""
     email = (email or '').strip().lower()
     if not is_mail_ru_email(email):
         return False, 'Регистрация только с адреса Mail.ru: mail.ru, inbox.ru, bk.ru, list.ru, internet.ru, mail.ua.'
@@ -104,21 +95,6 @@ def verify_mail_ru_mailbox_exists(email: str) -> tuple:
         return False, 'Некорректная длина имени ящика (от 3 до 32 символов).'
     if not re.match(r'^[a-z0-9._-]+$', local):
         return False, 'Имя ящика: латиница, цифры и символы . _ -'
-
-    if not _mailru_rcpt_check_enabled():
-        return True, ''
-
-    try:
-        with smtplib.SMTP('mxs.mail.ru', 25, timeout=15) as smtp:
-            smtp.ehlo('library-catalog.local')
-            smtp.mail('')
-            code, message = smtp.rcpt(email)
-            if code in (250, 251):
-                return True, ''
-            if code >= 400:
-                return False, 'Такого почтового ящика на Mail.ru не найдено или адрес отклонён сервером.'
-    except (OSError, smtplib.SMTPException):
-        return True, ''
     return True, ''
 
 
@@ -296,6 +272,11 @@ def require_non_blocked_user():
         return
     session.clear()
     return jsonify({'error': 'Аккаунт заблокирован'}), 403
+
+
+@app.route('/api/ping')
+def api_ping():
+    return jsonify({'ok': True, 'build': APP_BUILD, 'mailru_smtp_check': False})
 
 
 @app.route('/')
