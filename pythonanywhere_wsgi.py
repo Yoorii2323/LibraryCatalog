@@ -11,6 +11,8 @@
 import sys
 import os
 
+os.environ.setdefault('APP_BASE_URL', 'https://yoori2323.pythonanywhere.com')
+
 # Путь к корню проекта на PythonAnywhere (измените ИМЯ_РЕПО, если клонировали под другим именем)
 path_project = '/home/yoori2323/LibraryCatalog'
 path_backend = os.path.join(path_project, 'backend')

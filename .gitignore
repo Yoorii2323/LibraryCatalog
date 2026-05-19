@@ -35,4 +35,6 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
+.flask_secret
+backend/.flask_secret
 

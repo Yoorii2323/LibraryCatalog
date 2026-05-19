@@ -103,12 +103,11 @@ pip install -r backend/requirements.txt
 
 | Переменная | Значение (пример) | Зачем |
 |------------|-------------------|--------|
-| `FLASK_SECRET_KEY` | длинная случайная строка | сессии не сбрасываются после Reload |
-| `APP_BASE_URL` | `https://yoori2323.pythonanywhere.com` | поиск «Все источники», если агрегация не находит API |
-| `SKIP_MAILRU_RCPT` | `1` | если регистрация Mail.ru падает на проверке ящика |
-| `SMTP_USER`, `SMTP_PASSWORD`, … | — | письма с кодом подтверждения почты |
+| `FLASK_SECRET_KEY` | (необязательно) | иначе ключ сохраняется в `backend/.flask_secret` на сервере |
+| `SMTP_USER`, `SMTP_PASSWORD`, … | (необязательно) | письма с кодом; без SMTP код показывается на экране в профиле |
+| `ENABLE_MAILRU_RCPT` | `1` | только если нужна жёсткая проверка ящика через порт 25 (на PA не сработает) |
 
-Пароли в GitHub не кладите — только в Environment variables на PythonAnywhere.
+Регистрация и сессии работают **без** ручной настройки переменных. Пароли SMTP — только если нужна реальная отправка писем.
 
 ---
 
@@ -170,7 +169,7 @@ pip install -r backend/requirements.txt   # только если меняли r
 
 **После Reload выкидывает из аккаунта** — задайте `FLASK_SECRET_KEY`.
 
-**Регистрация Mail.ru** — поставьте `SKIP_MAILRU_RCPT=1` или настройте SMTP.
+**Регистрация Mail.ru** — обновите код с GitHub (`git pull`) и **Reload**; проверка через порт 25 отключена по умолчанию.
 
 **Пустой поиск «Все источники»** — поправьте `aggregate_search` (шаг 2).
 
@@ -190,7 +189,7 @@ pip install -r backend/requirements.txt   # только если меняли r
 - [ ] клон на PythonAnywhere (`/home/yoori2323/...`), venv, `pip install`  
 - [ ] WSGI из `pythonanywhere_wsgi.py`, путь `path_project` верный  
 - [ ] venv указан на вкладке Web  
-- [ ] `FLASK_SECRET_KEY` (и при необходимости `APP_BASE_URL`, `SKIP_MAILRU_RCPT`)  
+- [ ] (по желанию) SMTP для отправки писем  
 - [ ] `init_db` и `create_admin.py`  
 - [ ] **Reload**  
 - [ ] https://yoori2323.pythonanywhere.com/ — главная, вход, поиск, `/admin`  

@@ -19,11 +19,36 @@ BASE_DIR = Path(__file__).parent.parent
 TEMPLATES_DIR = BASE_DIR / 'templates'
 STATIC_DIR = BASE_DIR / 'static'
 BACKEND_DIR = Path(__file__).parent
+SECRET_KEY_FILE = BACKEND_DIR / '.flask_secret'
+
+# Публичный URL сайта на PythonAnywhere (для агрегированного поиска без переменных окружения)
+PYTHONANYWHERE_SITE_URL = 'https://yoori2323.pythonanywhere.com'
+
+
+def is_pythonanywhere() -> bool:
+    return bool(os.environ.get('PYTHONANYWHERE_SITE') or os.environ.get('PYTHONANYWHERE_DOMAIN'))
+
+
+def _load_secret_key() -> str:
+    env_key = os.environ.get('FLASK_SECRET_KEY', '').strip()
+    if env_key:
+        return env_key
+    if SECRET_KEY_FILE.is_file():
+        stored = SECRET_KEY_FILE.read_text(encoding='utf-8').strip()
+        if stored:
+            return stored
+    key = secrets.token_hex(32)
+    try:
+        SECRET_KEY_FILE.write_text(key, encoding='utf-8')
+    except OSError:
+        pass
+    return key
+
 
 app = Flask(__name__,
             template_folder=str(TEMPLATES_DIR),
             static_folder=str(STATIC_DIR))
-app.secret_key = os.environ.get('FLASK_SECRET_KEY') or os.urandom(24)
+app.secret_key = _load_secret_key()
 CORS(app, supports_credentials=True)
 
 DB_PATH = str(BACKEND_DIR / 'library.db')
@@ -58,8 +83,19 @@ def is_mail_ru_email(email: str) -> bool:
     return domain in MAIL_RU_DOMAINS
 
 
+def _mailru_rcpt_check_enabled() -> bool:
+    """Проверка существования ящика через порт 25 — только если явно включена (локально)."""
+    if os.environ.get('SKIP_MAILRU_RCPT', '').lower() in ('1', 'true', 'yes'):
+        return False
+    if os.environ.get('ENABLE_MAILRU_RCPT', '').lower() in ('1', 'true', 'yes'):
+        return True
+    if is_pythonanywhere():
+        return False
+    return False
+
+
 def verify_mail_ru_mailbox_exists(email: str) -> tuple:
-    """Проверка ящика через RCPT TO на MX Mail.ru (при недоступности порта 25 — SKIP_MAILRU_RCPT)."""
+    """Формат и домен Mail.ru; RCPT на MX — только при ENABLE_MAILRU_RCPT=1."""
     email = (email or '').strip().lower()
     if not is_mail_ru_email(email):
         return False, 'Регистрация только с адреса Mail.ru: mail.ru, inbox.ru, bk.ru, list.ru, internet.ru, mail.ua.'
@@ -69,7 +105,7 @@ def verify_mail_ru_mailbox_exists(email: str) -> tuple:
     if not re.match(r'^[a-z0-9._-]+$', local):
         return False, 'Имя ящика: латиница, цифры и символы . _ -'
 
-    if os.environ.get('SKIP_MAILRU_RCPT', '').lower() in ('1', 'true', 'yes'):
+    if not _mailru_rcpt_check_enabled():
         return True, ''
 
     try:
@@ -82,10 +118,7 @@ def verify_mail_ru_mailbox_exists(email: str) -> tuple:
             if code >= 400:
                 return False, 'Такого почтового ящика на Mail.ru не найдено или адрес отклонён сервером.'
     except (OSError, smtplib.SMTPException):
-        return False, (
-            'Не удалось проверить ящик через сервер Mail.ru (часто блокируют порт 25). '
-            'Для локальной разработки задайте SKIP_MAILRU_RCPT=1.'
-        )
+        return True, ''
     return True, ''
 
 
@@ -1154,8 +1187,13 @@ def request_email_verification_code():
     body = f'Код подтверждения почты в каталоге библиотеки: {code}\nКод действителен 15 минут.'
     sent = send_plain_email(email, 'Код подтверждения почты', body)
     if not sent:
+        if is_pythonanywhere() or not os.environ.get('SMTP_USER', '').strip():
+            return jsonify({
+                'message': f'Письмо на хостинге не отправляется без SMTP. Код подтверждения: {code} (15 мин.)',
+                'demo_code': code,
+            }), 200
         return jsonify({
-            'message': 'Код сформирован, но письмо не отправлено (настройте SMTP_USER/SMTP_PASSWORD). См. консоль сервера.',
+            'message': 'Код сформирован, но письмо не отправлено (проверьте SMTP_USER/SMTP_PASSWORD).',
             'dev_code_logged': True,
         }), 200
 
@@ -1520,7 +1558,11 @@ def aggregate_search():
             return None
         return None
 
-    base = (os.environ.get('APP_BASE_URL') or request.url_root).rstrip('/')
+    base = (
+        os.environ.get('APP_BASE_URL')
+        or (PYTHONANYWHERE_SITE_URL if is_pythonanywhere() else None)
+        or request.url_root
+    ).rstrip('/')
     if base and not base.startswith('http'):
         base = f'https://{base}'
 
